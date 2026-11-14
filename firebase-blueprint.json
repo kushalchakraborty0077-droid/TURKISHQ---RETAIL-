@@ -1,0 +1,310 @@
+{
+  "entities": {
+    "AdminRegistry": {
+      "title": "AdminRegistry",
+      "description": "Trusted Master Admin UID registry entry.",
+      "type": "object",
+      "properties": {
+        "uid": { "type": "string" },
+        "email": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time", "description": "ServerTimestamp" }
+      },
+      "required": ["uid", "email", "createdAt"]
+    },
+    "StoreConfig": {
+      "title": "StoreConfig",
+      "description": "Master store configuration, settings, and admin terminal credentials.",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string" },
+        "ownerEmail": { "type": "string" },
+        "businessName": { "type": "string" },
+        "businessAddress": { "type": "string" },
+        "contactNumber": { "type": "string" },
+        "invoiceFooter": { "type": "string" },
+        "currencySymbol": { "type": "string" },
+        "invoicePrefix": { "type": "string" },
+        "defaultTaxPercent": { "type": "number" },
+        "defaultDiscountPercent": { "type": "number" },
+        "stockTrackingEnabled": { "type": "boolean" },
+        "allowStaffViewSalesReportsDefault": { "type": "boolean" },
+        "allowStaffViewProfitReportsDefault": { "type": "boolean" },
+        "adminUsername": { "type": "string" },
+        "adminPasswordHash": { "type": "string" },
+        "adminPasswordSalt": { "type": "string" },
+        "memberEmails": { "type": "array" },
+        "salesViewerEmails": { "type": "array" },
+        "profitViewerEmails": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerUid", "ownerEmail", "businessName", "currencySymbol", "invoicePrefix", "adminUsername", "adminPasswordHash", "adminPasswordSalt", "memberEmails", "salesViewerEmails", "profitViewerEmails", "createdAt", "updatedAt"]
+    },
+    "StaffAccess": {
+      "title": "StaffAccess",
+      "description": "Email-keyed staff authorization record for O(1) Firestore rule verification.",
+      "type": "object",
+      "properties": {
+        "staffId": { "type": "string" },
+        "email": { "type": "string" },
+        "username": { "type": "string" },
+        "displayName": { "type": "string" },
+        "active": { "type": "boolean" },
+        "canViewSalesReports": { "type": "boolean" },
+        "canViewProfitReports": { "type": "boolean" },
+        "ownerUid": { "type": "string" },
+        "ownerEmail": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["staffId", "email", "username", "displayName", "active", "canViewSalesReports", "canViewProfitReports", "ownerUid", "ownerEmail", "createdAt", "updatedAt"]
+    },
+    "StaffAccount": {
+      "title": "StaffAccount",
+      "description": "Individual staff profile and salted password hash.",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string" },
+        "ownerEmail": { "type": "string" },
+        "username": { "type": "string" },
+        "displayName": { "type": "string" },
+        "passwordHash": { "type": "string" },
+        "passwordSalt": { "type": "string" },
+        "linkedEmail": { "type": "string" },
+        "active": { "type": "boolean" },
+        "canViewSalesReports": { "type": "boolean" },
+        "canViewProfitReports": { "type": "boolean" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerUid", "ownerEmail", "username", "displayName", "passwordHash", "passwordSalt", "active", "canViewSalesReports", "canViewProfitReports", "createdAt", "updatedAt"]
+    },
+    "Category": {
+      "title": "Category",
+      "description": "Retail product category.",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string" },
+        "ownerEmail": { "type": "string" },
+        "memberEmails": { "type": "array" },
+        "name": { "type": "string" },
+        "sortOrder": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerUid", "ownerEmail", "memberEmails", "name", "sortOrder", "createdAt", "updatedAt"]
+    },
+    "Product": {
+      "title": "Product",
+      "description": "Retail product catalog item with selling price and stock level.",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string" },
+        "ownerEmail": { "type": "string" },
+        "memberEmails": { "type": "array" },
+        "name": { "type": "string" },
+        "categoryId": { "type": "string" },
+        "categoryName": { "type": "string" },
+        "sellingPrice": { "type": "number" },
+        "description": { "type": "string" },
+        "imageKey": { "type": "string" },
+        "imageBase64": { "type": "string" },
+        "active": { "type": "boolean" },
+        "trackStock": { "type": "boolean" },
+        "stockQty": { "type": "integer" },
+        "lowStockThreshold": { "type": "integer" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerUid", "ownerEmail", "memberEmails", "name", "categoryId", "categoryName", "sellingPrice", "active", "trackStock", "stockQty", "lowStockThreshold", "createdAt", "updatedAt"]
+    },
+    "ProductCost": {
+      "title": "ProductCost",
+      "description": "Confidential product purchase cost restricted to Master Admin and profit-permitted staff.",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string" },
+        "ownerEmail": { "type": "string" },
+        "profitViewerEmails": { "type": "array" },
+        "productId": { "type": "string" },
+        "purchaseCost": { "type": "number" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerUid", "ownerEmail", "profitViewerEmails", "productId", "purchaseCost", "createdAt", "updatedAt"]
+    },
+    "InvoiceCounter": {
+      "title": "InvoiceCounter",
+      "description": "Atomic sequential invoice number counter.",
+      "type": "object",
+      "properties": {
+        "ownerEmail": { "type": "string" },
+        "nextNumber": { "type": "integer" },
+        "year": { "type": "integer" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerEmail", "nextNumber", "year", "updatedAt"]
+    },
+    "Invoice": {
+      "title": "Invoice",
+      "description": "Permanent retail bill/invoice with snapshotted line items.",
+      "type": "object",
+      "properties": {
+        "storeOwnerUid": { "type": "string" },
+        "storeOwnerEmail": { "type": "string" },
+        "reportViewerEmails": { "type": "array" },
+        "staffAuthEmail": { "type": "string" },
+        "invoiceNumber": { "type": "string" },
+        "sequenceNumber": { "type": "integer" },
+        "invoiceYear": { "type": "integer" },
+        "dateKey": { "type": "string" },
+        "epochMillis": { "type": "integer" },
+        "staffId": { "type": "string" },
+        "staffName": { "type": "string" },
+        "customerName": { "type": "string" },
+        "customerPhone": { "type": "string" },
+        "items": { "type": "array" },
+        "subtotal": { "type": "number" },
+        "discountAmount": { "type": "number" },
+        "taxPercent": { "type": "number" },
+        "taxAmount": { "type": "number" },
+        "grandTotal": { "type": "number" },
+        "paymentMethod": { "type": "string", "enum": ["Cash", "UPI", "Card", "Other"] },
+        "status": { "type": "string", "enum": ["completed", "cancelled"] },
+        "cancelReason": { "type": "string" },
+        "cancelledBy": { "type": "string" },
+        "editCount": { "type": "integer" },
+        "lastEditedBy": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["storeOwnerUid", "storeOwnerEmail", "reportViewerEmails", "staffAuthEmail", "invoiceNumber", "sequenceNumber", "invoiceYear", "dateKey", "epochMillis", "staffId", "staffName", "items", "subtotal", "discountAmount", "taxPercent", "taxAmount", "grandTotal", "paymentMethod", "status", "editCount", "createdAt", "updatedAt"]
+    },
+    "InvoiceCost": {
+      "title": "InvoiceCost",
+      "description": "Confidential COGS snapshot for an invoice, restricted to Master Admin and profit-permitted staff.",
+      "type": "object",
+      "properties": {
+        "storeOwnerUid": { "type": "string" },
+        "storeOwnerEmail": { "type": "string" },
+        "profitViewerEmails": { "type": "array" },
+        "invoiceNumber": { "type": "string" },
+        "dateKey": { "type": "string" },
+        "epochMillis": { "type": "integer" },
+        "status": { "type": "string", "enum": ["completed", "cancelled"] },
+        "totalCost": { "type": "number" },
+        "totalRevenue": { "type": "number" },
+        "itemCosts": { "type": "array" },
+        "createdAt": { "type": "string", "format": "date-time" },
+        "updatedAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["storeOwnerUid", "storeOwnerEmail", "profitViewerEmails", "invoiceNumber", "dateKey", "epochMillis", "status", "totalCost", "totalRevenue", "itemCosts", "createdAt", "updatedAt"]
+    },
+    "InvoiceRevision": {
+      "title": "InvoiceRevision",
+      "description": "Immutable audit record of invoice edits and cancellations.",
+      "type": "object",
+      "properties": {
+        "editedBy": { "type": "string" },
+        "editedByRole": { "type": "string" },
+        "changeSummary": { "type": "string" },
+        "previousGrandTotal": { "type": "number" },
+        "newGrandTotal": { "type": "number" },
+        "previousStatus": { "type": "string" },
+        "newStatus": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["editedBy", "editedByRole", "changeSummary", "previousGrandTotal", "newGrandTotal", "previousStatus", "newStatus", "createdAt"]
+    },
+    "StockMovement": {
+      "title": "StockMovement",
+      "description": "Immutable inventory movement ledger entry.",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string" },
+        "ownerEmail": { "type": "string" },
+        "productId": { "type": "string" },
+        "productName": { "type": "string" },
+        "type": { "type": "string", "enum": ["initial", "purchase", "adjustment", "sale", "invoice_edit", "invoice_cancel"] },
+        "deltaQty": { "type": "integer" },
+        "resultingQty": { "type": "integer" },
+        "referenceId": { "type": "string" },
+        "performedBy": { "type": "string" },
+        "note": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerUid", "ownerEmail", "productId", "productName", "type", "deltaQty", "resultingQty", "referenceId", "performedBy", "createdAt"]
+    },
+    "ActivityLog": {
+      "title": "ActivityLog",
+      "description": "Immutable operational audit log for Master Admin and Staff actions.",
+      "type": "object",
+      "properties": {
+        "ownerUid": { "type": "string" },
+        "ownerEmail": { "type": "string" },
+        "actorId": { "type": "string" },
+        "actorName": { "type": "string" },
+        "actorRole": { "type": "string", "enum": ["master_admin", "staff"] },
+        "action": { "type": "string" },
+        "details": { "type": "string" },
+        "dateKey": { "type": "string" },
+        "createdAt": { "type": "string", "format": "date-time" }
+      },
+      "required": ["ownerUid", "ownerEmail", "actorId", "actorName", "actorRole", "action", "details", "dateKey", "createdAt"]
+    }
+  },
+  "firestore": {
+    "/admins/{adminUid}": {
+      "schema": { "$ref": "#/entities/AdminRegistry" },
+      "description": "Trusted Master Admin UID registry."
+    },
+    "/storeConfig/{configId}": {
+      "schema": { "$ref": "#/entities/StoreConfig" },
+      "description": "Store settings and admin login credentials."
+    },
+    "/staffAccess/{staffEmail}": {
+      "schema": { "$ref": "#/entities/StaffAccess" },
+      "description": "Email-keyed staff permission map."
+    },
+    "/staffAccounts/{staffId}": {
+      "schema": { "$ref": "#/entities/StaffAccount" },
+      "description": "Staff accounts and hashed credentials."
+    },
+    "/categories/{categoryId}": {
+      "schema": { "$ref": "#/entities/Category" },
+      "description": "Retail product categories."
+    },
+    "/products/{productId}": {
+      "schema": { "$ref": "#/entities/Product" },
+      "description": "Retail product catalog."
+    },
+    "/productCosts/{productId}": {
+      "schema": { "$ref": "#/entities/ProductCost" },
+      "description": "Confidential purchase costs for profit calculations."
+    },
+    "/counters/{counterId}": {
+      "schema": { "$ref": "#/entities/InvoiceCounter" },
+      "description": "Atomic sequential invoice number counter."
+    },
+    "/invoices/{invoiceId}": {
+      "schema": { "$ref": "#/entities/Invoice" },
+      "description": "Permanent retail invoices."
+    },
+    "/invoiceCosts/{invoiceId}": {
+      "schema": { "$ref": "#/entities/InvoiceCost" },
+      "description": "Confidential invoice COGS records."
+    },
+    "/invoices/{invoiceId}/revisions/{revisionId}": {
+      "schema": { "$ref": "#/entities/InvoiceRevision" },
+      "description": "Invoice edit and cancellation audit history."
+    },
+    "/stockMovements/{movementId}": {
+      "schema": { "$ref": "#/entities/StockMovement" },
+      "description": "Immutable stock movement history."
+    },
+    "/activityLogs/{logId}": {
+      "schema": { "$ref": "#/entities/ActivityLog" },
+      "description": "Immutable user activity log."
+    }
+  }
+}

@@ -1,0 +1,667 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Global safety net: deny everything by default
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // --- GLOBAL PRIMITIVES ---
+    function isValidId(id) {
+      return id is string && id.size() >= 1 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    function incoming() {
+      return request.resource.data;
+    }
+
+    function existing() {
+      return resource.data;
+    }
+
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isVerifiedEmail() {
+      return isSignedIn() &&
+             request.auth.token.email_verified == true &&
+             request.auth.token.email is string &&
+             request.auth.token.email.size() >= 3 &&
+             request.auth.token.email.size() <= 120;
+    }
+
+    function isBootstrappedAdminEmail() {
+      return isVerifiedEmail() && request.auth.token.email == 'kushalchakraborty0077@gmail.com';
+    }
+
+    function isMasterAdmin() {
+      return isVerifiedEmail() && (
+        isBootstrappedAdminEmail() ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    function staffAccessPath(email) {
+      return /databases/$(database)/documents/staffAccess/$(email);
+    }
+
+    function isActiveStaff() {
+      return isVerifiedEmail() &&
+             exists(staffAccessPath(request.auth.token.email)) &&
+             get(staffAccessPath(request.auth.token.email)).data.active == true;
+    }
+
+    function isPermittedProfitStaff() {
+      return isActiveStaff() &&
+             get(staffAccessPath(request.auth.token.email)).data.canViewProfitReports == true;
+    }
+
+    function isValidTimestamp(ts) {
+      return ts is timestamp && ts <= request.time;
+    }
+
+    function isStringBounded(val, minLen, maxLen) {
+      return val is string && val.size() >= minLen && val.size() <= maxLen;
+    }
+
+    function isEmailList(arr) {
+      return arr is list && arr.size() <= 50 && (arr.size() == 0 || arr[0] is string);
+    }
+
+    // --- VALIDATION HELPERS ---
+    function isValidAdminDoc(data) {
+      return data.keys().hasAll(['uid', 'email', 'createdAt']) &&
+             data.keys().hasOnly(['uid', 'email', 'createdAt']) &&
+             isStringBounded(data.uid, 1, 128) &&
+             isStringBounded(data.email, 3, 120) &&
+             isValidTimestamp(data.createdAt);
+    }
+
+    function isValidStoreConfig(data) {
+      return data.keys().hasAll([
+               'ownerUid', 'ownerEmail', 'businessName', 'currencySymbol',
+               'invoicePrefix', 'adminUsername', 'adminPasswordHash',
+               'adminPasswordSalt', 'memberEmails', 'salesViewerEmails',
+               'profitViewerEmails', 'createdAt', 'updatedAt'
+             ]) &&
+             data.keys().hasOnly([
+               'ownerUid', 'ownerEmail', 'businessName', 'businessAddress',
+               'contactNumber', 'invoiceFooter', 'currencySymbol',
+               'invoicePrefix', 'defaultTaxPercent', 'defaultDiscountPercent',
+               'stockTrackingEnabled', 'allowStaffViewSalesReportsDefault',
+               'allowStaffViewProfitReportsDefault', 'adminUsername',
+               'adminPasswordHash', 'adminPasswordSalt', 'memberEmails',
+               'salesViewerEmails', 'profitViewerEmails', 'createdAt', 'updatedAt'
+             ]) &&
+             isStringBounded(data.ownerUid, 1, 128) &&
+             isStringBounded(data.ownerEmail, 3, 120) &&
+             isStringBounded(data.businessName, 1, 80) &&
+             (!('businessAddress' in data) || isStringBounded(data.businessAddress, 0, 200)) &&
+             (!('contactNumber' in data) || isStringBounded(data.contactNumber, 0, 40)) &&
+             (!('invoiceFooter' in data) || isStringBounded(data.invoiceFooter, 0, 200)) &&
+             isStringBounded(data.currencySymbol, 1, 8) &&
+             isStringBounded(data.invoicePrefix, 2, 10) &&
+             (!('defaultTaxPercent' in data) || (data.defaultTaxPercent is number && data.defaultTaxPercent >= 0 && data.defaultTaxPercent <= 100)) &&
+             (!('defaultDiscountPercent' in data) || (data.defaultDiscountPercent is number && data.defaultDiscountPercent >= 0 && data.defaultDiscountPercent <= 100)) &&
+             (!('stockTrackingEnabled' in data) || data.stockTrackingEnabled is bool) &&
+             (!('allowStaffViewSalesReportsDefault' in data) || data.allowStaffViewSalesReportsDefault is bool) &&
+             (!('allowStaffViewProfitReportsDefault' in data) || data.allowStaffViewProfitReportsDefault is bool) &&
+             isStringBounded(data.adminUsername, 3, 40) &&
+             isStringBounded(data.adminPasswordHash, 16, 256) &&
+             isStringBounded(data.adminPasswordSalt, 8, 128) &&
+             isEmailList(data.memberEmails) &&
+             isEmailList(data.salesViewerEmails) &&
+             isEmailList(data.profitViewerEmails) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidStaffAccess(data) {
+      return data.keys().hasAll([
+               'staffId', 'email', 'username', 'displayName', 'active',
+               'canViewSalesReports', 'canViewProfitReports', 'ownerUid',
+               'ownerEmail', 'createdAt', 'updatedAt'
+             ]) &&
+             data.keys().hasOnly([
+               'staffId', 'email', 'username', 'displayName', 'active',
+               'canViewSalesReports', 'canViewProfitReports', 'ownerUid',
+               'ownerEmail', 'createdAt', 'updatedAt'
+             ]) &&
+             isStringBounded(data.staffId, 1, 128) &&
+             isStringBounded(data.email, 3, 120) &&
+             isStringBounded(data.username, 2, 40) &&
+             isStringBounded(data.displayName, 1, 60) &&
+             data.active is bool &&
+             data.canViewSalesReports is bool &&
+             data.canViewProfitReports is bool &&
+             isStringBounded(data.ownerUid, 1, 128) &&
+             isStringBounded(data.ownerEmail, 3, 120) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidStaffAccount(data) {
+      return data.keys().hasAll([
+               'ownerUid', 'ownerEmail', 'username', 'displayName',
+               'passwordHash', 'passwordSalt', 'active',
+               'canViewSalesReports', 'canViewProfitReports', 'createdAt', 'updatedAt'
+             ]) &&
+             data.keys().hasOnly([
+               'ownerUid', 'ownerEmail', 'username', 'displayName',
+               'passwordHash', 'passwordSalt', 'linkedEmail', 'active',
+               'canViewSalesReports', 'canViewProfitReports', 'createdAt', 'updatedAt'
+             ]) &&
+             isStringBounded(data.ownerUid, 1, 128) &&
+             isStringBounded(data.ownerEmail, 3, 120) &&
+             isStringBounded(data.username, 2, 40) &&
+             isStringBounded(data.displayName, 1, 60) &&
+             isStringBounded(data.passwordHash, 16, 256) &&
+             isStringBounded(data.passwordSalt, 8, 128) &&
+             (!('linkedEmail' in data) || isStringBounded(data.linkedEmail, 0, 120)) &&
+             data.active is bool &&
+             data.canViewSalesReports is bool &&
+             data.canViewProfitReports is bool &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidCategory(data) {
+      return data.keys().hasAll(['ownerUid', 'ownerEmail', 'memberEmails', 'name', 'sortOrder', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['ownerUid', 'ownerEmail', 'memberEmails', 'name', 'sortOrder', 'createdAt', 'updatedAt']) &&
+             isStringBounded(data.ownerUid, 1, 128) &&
+             isStringBounded(data.ownerEmail, 3, 120) &&
+             isEmailList(data.memberEmails) &&
+             isStringBounded(data.name, 1, 60) &&
+             data.sortOrder is int && data.sortOrder >= 0 && data.sortOrder <= 10000 &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidProduct(data) {
+      return data.keys().hasAll([
+               'ownerUid', 'ownerEmail', 'memberEmails', 'name', 'categoryId',
+               'categoryName', 'sellingPrice', 'active', 'trackStock',
+               'stockQty', 'lowStockThreshold', 'createdAt', 'updatedAt'
+             ]) &&
+             data.keys().hasOnly([
+               'ownerUid', 'ownerEmail', 'memberEmails', 'name', 'categoryId',
+               'categoryName', 'sellingPrice', 'description', 'imageKey',
+               'imageBase64', 'active', 'trackStock', 'stockQty',
+               'lowStockThreshold', 'createdAt', 'updatedAt'
+             ]) &&
+             isStringBounded(data.ownerUid, 1, 128) &&
+             isStringBounded(data.ownerEmail, 3, 120) &&
+             isEmailList(data.memberEmails) &&
+             isStringBounded(data.name, 1, 80) &&
+             isStringBounded(data.categoryId, 1, 128) &&
+             isStringBounded(data.categoryName, 1, 60) &&
+             data.sellingPrice is number && data.sellingPrice >= 0 && data.sellingPrice <= 10000000 &&
+             (!('description' in data) || isStringBounded(data.description, 0, 300)) &&
+             (!('imageKey' in data) || isStringBounded(data.imageKey, 0, 40)) &&
+             (!('imageBase64' in data) || isStringBounded(data.imageBase64, 0, 200000)) &&
+             data.active is bool &&
+             data.trackStock is bool &&
+             data.stockQty is int && data.stockQty >= 0 && data.stockQty <= 10000000 &&
+             data.lowStockThreshold is int && data.lowStockThreshold >= 0 && data.lowStockThreshold <= 100000 &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidProductCost(data) {
+      return data.keys().hasAll(['ownerUid', 'ownerEmail', 'profitViewerEmails', 'productId', 'purchaseCost', 'createdAt', 'updatedAt']) &&
+             data.keys().hasOnly(['ownerUid', 'ownerEmail', 'profitViewerEmails', 'productId', 'purchaseCost', 'createdAt', 'updatedAt']) &&
+             isStringBounded(data.ownerUid, 1, 128) &&
+             isStringBounded(data.ownerEmail, 3, 120) &&
+             isEmailList(data.profitViewerEmails) &&
+             isStringBounded(data.productId, 1, 128) &&
+             data.purchaseCost is number && data.purchaseCost >= 0 && data.purchaseCost <= 10000000 &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidCounter(data) {
+      return data.keys().hasAll(['ownerEmail', 'nextNumber', 'year', 'updatedAt']) &&
+             data.keys().hasOnly(['ownerEmail', 'nextNumber', 'year', 'updatedAt']) &&
+             isStringBounded(data.ownerEmail, 3, 120) &&
+             data.nextNumber is int && data.nextNumber >= 1 && data.nextNumber <= 99999999 &&
+             data.year is int && data.year >= 2024 && data.year <= 2100 &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidInvoice(data) {
+      return data.keys().hasAll([
+               'storeOwnerUid', 'storeOwnerEmail', 'reportViewerEmails', 'staffAuthEmail',
+               'invoiceNumber', 'sequenceNumber', 'invoiceYear', 'dateKey', 'epochMillis',
+               'staffId', 'staffName', 'items', 'subtotal', 'discountAmount',
+               'taxPercent', 'taxAmount', 'grandTotal', 'paymentMethod', 'status',
+               'editCount', 'createdAt', 'updatedAt'
+             ]) &&
+             data.keys().hasOnly([
+               'storeOwnerUid', 'storeOwnerEmail', 'reportViewerEmails', 'staffAuthEmail',
+               'invoiceNumber', 'sequenceNumber', 'invoiceYear', 'dateKey', 'epochMillis',
+               'staffId', 'staffName', 'customerName', 'customerPhone', 'items',
+               'subtotal', 'discountAmount', 'taxPercent', 'taxAmount', 'grandTotal',
+               'paymentMethod', 'status', 'cancelReason', 'cancelledBy',
+               'editCount', 'lastEditedBy', 'createdAt', 'updatedAt'
+             ]) &&
+             isStringBounded(data.storeOwnerUid, 1, 128) &&
+             isStringBounded(data.storeOwnerEmail, 3, 120) &&
+             isEmailList(data.reportViewerEmails) &&
+             isStringBounded(data.staffAuthEmail, 3, 120) &&
+             isStringBounded(data.invoiceNumber, 5, 40) &&
+             data.sequenceNumber is int && data.sequenceNumber >= 1 &&
+             data.invoiceYear is int && data.invoiceYear >= 2024 && data.invoiceYear <= 2100 &&
+             isStringBounded(data.dateKey, 10, 10) &&
+             data.epochMillis is int && data.epochMillis > 0 &&
+             isStringBounded(data.staffId, 1, 128) &&
+             isStringBounded(data.staffName, 1, 60) &&
+             (!('customerName' in data) || isStringBounded(data.customerName, 0, 80)) &&
+             (!('customerPhone' in data) || isStringBounded(data.customerPhone, 0, 25)) &&
+             data.items is list && data.items.size() >= 1 && data.items.size() <= 100 &&
+             data.items[0] is map &&
+             data.subtotal is number && data.subtotal >= 0 &&
+             data.discountAmount is number && data.discountAmount >= 0 &&
+             data.taxPercent is number && data.taxPercent >= 0 && data.taxPercent <= 100 &&
+             data.taxAmount is number && data.taxAmount >= 0 &&
+             data.grandTotal is number && data.grandTotal >= 0 &&
+             data.paymentMethod in ['Cash', 'UPI', 'Card', 'Other'] &&
+             data.status in ['completed', 'cancelled'] &&
+             (!('cancelReason' in data) || isStringBounded(data.cancelReason, 0, 200)) &&
+             (!('cancelledBy' in data) || isStringBounded(data.cancelledBy, 0, 80)) &&
+             data.editCount is int && data.editCount >= 0 &&
+             (!('lastEditedBy' in data) || isStringBounded(data.lastEditedBy, 0, 80)) &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidInvoiceCost(data) {
+      return data.keys().hasAll([
+               'storeOwnerUid', 'storeOwnerEmail', 'profitViewerEmails',
+               'invoiceNumber', 'dateKey', 'epochMillis', 'status',
+               'totalCost', 'totalRevenue', 'itemCosts', 'createdAt', 'updatedAt'
+             ]) &&
+             data.keys().hasOnly([
+               'storeOwnerUid', 'storeOwnerEmail', 'profitViewerEmails',
+               'invoiceNumber', 'dateKey', 'epochMillis', 'status',
+               'totalCost', 'totalRevenue', 'itemCosts', 'createdAt', 'updatedAt'
+             ]) &&
+             isStringBounded(data.storeOwnerUid, 1, 128) &&
+             isStringBounded(data.storeOwnerEmail, 3, 120) &&
+             isEmailList(data.profitViewerEmails) &&
+             isStringBounded(data.invoiceNumber, 5, 40) &&
+             isStringBounded(data.dateKey, 10, 10) &&
+             data.epochMillis is int && data.epochMillis > 0 &&
+             data.status in ['completed', 'cancelled'] &&
+             data.totalCost is number && data.totalCost >= 0 &&
+             data.totalRevenue is number && data.totalRevenue >= 0 &&
+             data.itemCosts is list && data.itemCosts.size() >= 1 && data.itemCosts.size() <= 100 &&
+             isValidTimestamp(data.createdAt) &&
+             isValidTimestamp(data.updatedAt);
+    }
+
+    function isValidRevision(data) {
+      return data.keys().hasAll([
+               'editedBy', 'editedByRole', 'changeSummary',
+               'previousGrandTotal', 'newGrandTotal',
+               'previousStatus', 'newStatus', 'createdAt'
+             ]) &&
+             data.keys().hasOnly([
+               'editedBy', 'editedByRole', 'changeSummary',
+               'previousGrandTotal', 'newGrandTotal',
+               'previousStatus', 'newStatus', 'createdAt'
+             ]) &&
+             isStringBounded(data.editedBy, 1, 80) &&
+             isStringBounded(data.editedByRole, 1, 30) &&
+             isStringBounded(data.changeSummary, 1, 500) &&
+             data.previousGrandTotal is number && data.previousGrandTotal >= 0 &&
+             data.newGrandTotal is number && data.newGrandTotal >= 0 &&
+             data.previousStatus in ['completed', 'cancelled'] &&
+             data.newStatus in ['completed', 'cancelled'] &&
+             isValidTimestamp(data.createdAt);
+    }
+
+    function isValidStockMovement(data) {
+      return data.keys().hasAll([
+               'ownerUid', 'ownerEmail', 'productId', 'productName',
+               'type', 'deltaQty', 'resultingQty', 'referenceId',
+               'performedBy', 'createdAt'
+             ]) &&
+             data.keys().hasOnly([
+               'ownerUid', 'ownerEmail', 'productId', 'productName',
+               'type', 'deltaQty', 'resultingQty', 'referenceId',
+               'performedBy', 'note', 'createdAt'
+             ]) &&
+             isStringBounded(data.ownerUid, 1, 128) &&
+             isStringBounded(data.ownerEmail, 3, 120) &&
+             isStringBounded(data.productId, 1, 128) &&
+             isStringBounded(data.productName, 1, 80) &&
+             data.type in ['initial', 'purchase', 'adjustment', 'sale', 'invoice_edit', 'invoice_cancel'] &&
+             data.deltaQty is int &&
+             data.resultingQty is int && data.resultingQty >= 0 &&
+             isStringBounded(data.referenceId, 1, 60) &&
+             isStringBounded(data.performedBy, 1, 80) &&
+             (!('note' in data) || isStringBounded(data.note, 0, 200)) &&
+             isValidTimestamp(data.createdAt);
+    }
+
+    function isValidActivityLog(data) {
+      return data.keys().hasAll([
+               'ownerUid', 'ownerEmail', 'actorId', 'actorName',
+               'actorRole', 'action', 'details', 'dateKey', 'createdAt'
+             ]) &&
+             data.keys().hasOnly([
+               'ownerUid', 'ownerEmail', 'actorId', 'actorName',
+               'actorRole', 'action', 'details', 'dateKey', 'createdAt'
+             ]) &&
+             isStringBounded(data.ownerUid, 1, 128) &&
+             isStringBounded(data.ownerEmail, 3, 120) &&
+             isStringBounded(data.actorId, 1, 128) &&
+             isStringBounded(data.actorName, 1, 60) &&
+             data.actorRole in ['master_admin', 'staff'] &&
+             isStringBounded(data.action, 1, 60) &&
+             isStringBounded(data.details, 1, 400) &&
+             isStringBounded(data.dateKey, 10, 10) &&
+             isValidTimestamp(data.createdAt);
+    }
+
+    // --- COLLECTION RULES ---
+
+    match /admins/{adminUid} {
+      allow get: if isSignedIn() && isValidId(adminUid) && request.auth.uid == adminUid;
+      allow list: if false;
+      allow create: if isSignedIn() &&
+                       isValidId(adminUid) &&
+                       isVerifiedEmail() &&
+                       request.auth.uid == adminUid &&
+                       isValidAdminDoc(incoming()) &&
+                       incoming().uid == request.auth.uid &&
+                       incoming().email == request.auth.token.email &&
+                       (
+                         isBootstrappedAdminEmail() ||
+                         !exists(/databases/$(database)/documents/storeConfig/main) ||
+                         isMasterAdmin()
+                       );
+      allow update, delete: if false;
+    }
+
+    match /storeConfig/{configId} {
+      allow get: if isSignedIn() &&
+                    configId == 'main' &&
+                    isVerifiedEmail() &&
+                    (
+                      !exists(/databases/$(database)/documents/storeConfig/main) ||
+                      isMasterAdmin() ||
+                      isActiveStaff()
+                    );
+      allow list: if false;
+      allow create: if isSignedIn() &&
+                       configId == 'main' &&
+                       isVerifiedEmail() &&
+                       isValidStoreConfig(incoming()) &&
+                       incoming().ownerUid == request.auth.uid &&
+                       incoming().ownerEmail == request.auth.token.email &&
+                       (!exists(/databases/$(database)/documents/storeConfig/main) || isMasterAdmin());
+      allow update: if isMasterAdmin() &&
+                       configId == 'main' &&
+                       isValidStoreConfig(incoming()) &&
+                       incoming().ownerUid == existing().ownerUid &&
+                       incoming().ownerEmail == existing().ownerEmail &&
+                       incoming().createdAt == existing().createdAt;
+      allow delete: if false;
+    }
+
+    match /staffAccess/{staffEmail} {
+      allow get: if isVerifiedEmail() && (isMasterAdmin() || request.auth.token.email == staffEmail);
+      allow list: if isVerifiedEmail() && (
+                    resource.data.ownerEmail == request.auth.token.email ||
+                    isBootstrappedAdminEmail()
+                  );
+      allow create: if isMasterAdmin() &&
+                       isValidStaffAccess(incoming()) &&
+                       incoming().email == staffEmail &&
+                       incoming().ownerEmail == request.auth.token.email;
+      allow update: if isMasterAdmin() &&
+                       isValidStaffAccess(incoming()) &&
+                       incoming().email == existing().email &&
+                       incoming().ownerUid == existing().ownerUid &&
+                       incoming().createdAt == existing().createdAt;
+      allow delete: if isMasterAdmin();
+    }
+
+    match /staffAccounts/{staffId} {
+      allow get: if isVerifiedEmail() &&
+                    isValidId(staffId) &&
+                    (
+                      isMasterAdmin() ||
+                      (existing().linkedEmail == request.auth.token.email && existing().active == true)
+                    );
+      allow list: if isVerifiedEmail() && (
+                    resource.data.ownerEmail == request.auth.token.email ||
+                    isBootstrappedAdminEmail() ||
+                    (resource.data.linkedEmail == request.auth.token.email && resource.data.active == true)
+                  );
+      allow create: if isMasterAdmin() &&
+                       isValidId(staffId) &&
+                       isValidStaffAccount(incoming()) &&
+                       incoming().ownerUid == request.auth.uid &&
+                       incoming().ownerEmail == request.auth.token.email;
+      allow update: if isMasterAdmin() &&
+                       isValidId(staffId) &&
+                       isValidStaffAccount(incoming()) &&
+                       incoming().ownerUid == existing().ownerUid &&
+                       incoming().ownerEmail == existing().ownerEmail &&
+                       incoming().createdAt == existing().createdAt;
+      allow delete: if isMasterAdmin() && isValidId(staffId);
+    }
+
+    match /categories/{categoryId} {
+      allow get: if isVerifiedEmail() &&
+                    isValidId(categoryId) &&
+                    (
+                      isMasterAdmin() ||
+                      (isActiveStaff() && request.auth.token.email in existing().memberEmails)
+                    );
+      allow list: if isVerifiedEmail() && (
+                    resource.data.ownerEmail == request.auth.token.email ||
+                    isBootstrappedAdminEmail() ||
+                    request.auth.token.email in resource.data.memberEmails
+                  );
+      allow create: if isMasterAdmin() &&
+                       isValidId(categoryId) &&
+                       isValidCategory(incoming()) &&
+                       incoming().ownerUid == request.auth.uid &&
+                       incoming().ownerEmail == request.auth.token.email;
+      allow update: if isMasterAdmin() &&
+                       isValidId(categoryId) &&
+                       isValidCategory(incoming()) &&
+                       incoming().ownerUid == existing().ownerUid &&
+                       incoming().createdAt == existing().createdAt;
+      allow delete: if isMasterAdmin() && isValidId(categoryId);
+    }
+
+    match /products/{productId} {
+      allow get: if isVerifiedEmail() &&
+                    isValidId(productId) &&
+                    (
+                      isMasterAdmin() ||
+                      (isActiveStaff() && request.auth.token.email in existing().memberEmails)
+                    );
+      allow list: if isVerifiedEmail() && (
+                    resource.data.ownerEmail == request.auth.token.email ||
+                    isBootstrappedAdminEmail() ||
+                    request.auth.token.email in resource.data.memberEmails
+                  );
+      allow create: if isMasterAdmin() &&
+                       isValidId(productId) &&
+                       isValidProduct(incoming()) &&
+                       incoming().ownerUid == request.auth.uid &&
+                       incoming().ownerEmail == request.auth.token.email &&
+                       exists(/databases/$(database)/documents/categories/$(incoming().categoryId));
+      allow update: if isVerifiedEmail() &&
+                       isValidId(productId) &&
+                       isValidProduct(incoming()) &&
+                       incoming().ownerUid == existing().ownerUid &&
+                       incoming().createdAt == existing().createdAt &&
+                       (
+                         isMasterAdmin() ||
+                         (
+                           isActiveStaff() &&
+                           request.auth.token.email in existing().memberEmails &&
+                           incoming().diff(existing()).affectedKeys().hasOnly(['stockQty', 'updatedAt']) &&
+                           incoming().stockQty <= existing().stockQty &&
+                           incoming().stockQty >= 0
+                         )
+                       );
+      allow delete: if isMasterAdmin() && isValidId(productId);
+    }
+
+    match /productCosts/{productId} {
+      allow get: if isVerifiedEmail() &&
+                    isValidId(productId) &&
+                    (
+                      isMasterAdmin() ||
+                      (isPermittedProfitStaff() && request.auth.token.email in existing().profitViewerEmails)
+                    );
+      allow list: if isVerifiedEmail() && (
+                    resource.data.ownerEmail == request.auth.token.email ||
+                    isBootstrappedAdminEmail() ||
+                    request.auth.token.email in resource.data.profitViewerEmails
+                  );
+      allow create: if isMasterAdmin() &&
+                       isValidId(productId) &&
+                       isValidProductCost(incoming()) &&
+                       incoming().ownerUid == request.auth.uid &&
+                       incoming().ownerEmail == request.auth.token.email;
+      allow update: if isMasterAdmin() &&
+                       isValidId(productId) &&
+                       isValidProductCost(incoming()) &&
+                       incoming().ownerUid == existing().ownerUid &&
+                       incoming().createdAt == existing().createdAt;
+      allow delete: if isMasterAdmin() && isValidId(productId);
+    }
+
+    match /counters/{counterId} {
+      allow get: if isVerifiedEmail() &&
+                    counterId == 'invoices' &&
+                    (isMasterAdmin() || isActiveStaff());
+      allow list: if false;
+      allow create: if isVerifiedEmail() &&
+                       counterId == 'invoices' &&
+                       (isMasterAdmin() || isActiveStaff()) &&
+                       isValidCounter(incoming()) &&
+                       incoming().nextNumber >= 1;
+      allow update: if isVerifiedEmail() &&
+                       counterId == 'invoices' &&
+                       (isMasterAdmin() || isActiveStaff()) &&
+                       isValidCounter(incoming()) &&
+                       incoming().ownerEmail == existing().ownerEmail &&
+                       incoming().nextNumber == existing().nextNumber + 1;
+      allow delete: if false;
+    }
+
+    match /invoices/{invoiceId} {
+      allow get: if isVerifiedEmail() &&
+                    isValidId(invoiceId) &&
+                    (
+                      isMasterAdmin() ||
+                      (
+                        isActiveStaff() &&
+                        (
+                          existing().staffAuthEmail == request.auth.token.email ||
+                          request.auth.token.email in existing().reportViewerEmails
+                        )
+                      )
+                    );
+      allow list: if isVerifiedEmail() && (
+                    resource.data.storeOwnerEmail == request.auth.token.email ||
+                    isBootstrappedAdminEmail() ||
+                    resource.data.staffAuthEmail == request.auth.token.email ||
+                    request.auth.token.email in resource.data.reportViewerEmails
+                  );
+      allow create: if isVerifiedEmail() &&
+                       isValidId(invoiceId) &&
+                       (isMasterAdmin() || isActiveStaff()) &&
+                       isValidInvoice(incoming()) &&
+                       incoming().status == 'completed' &&
+                       incoming().editCount == 0 &&
+                       incoming().staffAuthEmail == request.auth.token.email;
+      allow update: if isMasterAdmin() &&
+                       isValidId(invoiceId) &&
+                       isValidInvoice(incoming()) &&
+                       incoming().storeOwnerUid == existing().storeOwnerUid &&
+                       incoming().storeOwnerEmail == existing().storeOwnerEmail &&
+                       incoming().invoiceNumber == existing().invoiceNumber &&
+                       incoming().sequenceNumber == existing().sequenceNumber &&
+                       incoming().invoiceYear == existing().invoiceYear &&
+                       incoming().createdAt == existing().createdAt;
+      allow delete: if false;
+
+      match /revisions/{revisionId} {
+        allow get, list: if isMasterAdmin();
+        allow create: if isMasterAdmin() &&
+                         isValidId(invoiceId) &&
+                         isValidId(revisionId) &&
+                         isValidRevision(incoming());
+        allow update, delete: if false;
+      }
+    }
+
+    match /invoiceCosts/{invoiceId} {
+      allow get: if isVerifiedEmail() &&
+                    isValidId(invoiceId) &&
+                    (
+                      isMasterAdmin() ||
+                      (isPermittedProfitStaff() && request.auth.token.email in existing().profitViewerEmails)
+                    );
+      allow list: if isVerifiedEmail() && (
+                    resource.data.storeOwnerEmail == request.auth.token.email ||
+                    isBootstrappedAdminEmail() ||
+                    request.auth.token.email in resource.data.profitViewerEmails
+                  );
+      allow create: if isVerifiedEmail() &&
+                       isValidId(invoiceId) &&
+                       (isMasterAdmin() || isActiveStaff()) &&
+                       isValidInvoiceCost(incoming());
+      allow update: if isMasterAdmin() &&
+                       isValidId(invoiceId) &&
+                       isValidInvoiceCost(incoming()) &&
+                       incoming().storeOwnerUid == existing().storeOwnerUid &&
+                       incoming().createdAt == existing().createdAt;
+      allow delete: if false;
+    }
+
+    match /stockMovements/{movementId} {
+      allow get: if isMasterAdmin() && isValidId(movementId);
+      allow list: if isVerifiedEmail() && (
+                    resource.data.ownerEmail == request.auth.token.email ||
+                    isBootstrappedAdminEmail()
+                  );
+      allow create: if isVerifiedEmail() &&
+                       isValidId(movementId) &&
+                       isValidStockMovement(incoming()) &&
+                       (
+                         isMasterAdmin() ||
+                         (isActiveStaff() && incoming().type == 'sale')
+                       );
+      allow update, delete: if false;
+    }
+
+    match /activityLogs/{logId} {
+      allow get: if isMasterAdmin() && isValidId(logId);
+      allow list: if isVerifiedEmail() && (
+                    resource.data.ownerEmail == request.auth.token.email ||
+                    isBootstrappedAdminEmail()
+                  );
+      allow create: if isVerifiedEmail() &&
+                       isValidId(logId) &&
+                       isValidActivityLog(incoming()) &&
+                       (
+                         isMasterAdmin() ||
+                         (isActiveStaff() && incoming().actorRole == 'staff')
+                       );
+      allow update, delete: if false;
+    }
+  }
+}
